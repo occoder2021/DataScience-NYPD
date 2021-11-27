@@ -1,0 +1,101 @@
+---
+title: "Final Project 1: NYPD Shooting Incident Data Report"
+author: "Tapas"
+date: "11/8/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## NYPD Shooting Incident Data Report
+Summary: This project analyzes NYPD shooting dataset between year 2006 and 2020. My analysis focused on the number of shooting incident trend over the past 15 years and age group of the victims. Also, I tried to build a linear regression model to show the correlation between shooting incidents and deaths. Based on that analysis, my predicted death count was close to the actual count.
+
+
+## Load the NYPD Shooting data
+
+```{r get_nypd_data}
+library(tidyverse)
+url_in <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+```
+
+Read the data
+
+```{r nypd_data}
+nypd_data<-read_csv(url_in)
+```
+
+## Analyze the data
+
+select few columns and add a year column:
+```{r select_data}
+nypd_select1 <- nypd_data %>% select (OCCUR_DATE,BORO,PERP_AGE_GROUP, PERP_RACE,VIC_AGE_GROUP,VIC_SEX,STATISTICAL_MURDER_FLAG,INCIDENT_KEY)%>%
+  mutate(death=case_when(STATISTICAL_MURDER_FLAG=="TRUE"~1,STATISTICAL_MURDER_FLAG=="FALSE"~0))
+nypd_select2 <- nypd_select1 %>% mutate(year = str_sub(OCCUR_DATE,-4,-1))
+nypd_select3 <- nypd_select2  %>% filter(PERP_AGE_GROUP != 'NA')
+```
+
+Number of Shootings per year
+
+```{r shooting_per_year_data}
+shooting_per_year <- nypd_select2 %>% 
+    group_by(year) %>%
+    summarise(count_shootings = n())
+```
+
+```{r victims_by_age1}
+victims_by_age <- nypd_select3 %>% 
+    group_by(VIC_AGE_GROUP) %>%
+    summarise(count_victims = n())
+```
+
+## Visualize the data
+
+Shootings per year embed plot:
+
+```{r shooting_per_year, echo=TRUE}
+plot(shooting_per_year,col="red",ylim = c(400,2500),pch = 15,xlab = "Year",ylab = "Shooting Incidents")
+##ggplot(shooting_per_year, aes(x=year,y=count_shootings)) + geom_bar(stat="identity") 
+```
+
+Victims by age plot:
+
+
+```{r victims_by_age, echo=TRUE}
+library(ggplot2)
+qplot(VIC_AGE_GROUP,count_victims, data = victims_by_age,col="red",xlab = "Age Group",ylab = "No of Victims")
+
+```
+
+## Model the data: Linear Model 
+
+This model predicts the yearly murder count based on shooting data. As shown below the predicted death count (red dots) is close to the actual counts (blue dot)
+
+```{r linear_model_1, echo=TRUE}
+death_per_year <- nypd_select2 %>% 
+    group_by(year) %>%
+    summarise(death_count=sum(death))
+
+nypd_combined<-shooting_per_year%>%
+  full_join(death_per_year,
+            by=c("year"))
+
+mod<-lm(death_count ~ count_shootings,data=nypd_combined)
+summary(mod)
+
+## create new dataset NYPD shhoting death with prediction
+x_grid <- seq(1,2500)
+new_df <- tibble(count_shootings=x_grid)
+nypd_combined_w_pred <- nypd_combined %>% mutate(pred=predict(mod))
+nypd_combined_w_pred %>% ggplot() +
+  geom_point(aes(x=count_shootings,y=death_count),color="blue")+
+  geom_point(aes(x=count_shootings,y=pred),color="red")
+
+```
+
+## Conclusion
+
+My analysis focused on the number of shooting incident trend over the past 15 years and age group of the victims. The linear regression model predicted murder count was close to the actual count based on the shooting incidents. I may have bias to analyze data based on victim age thinking that number of incidents and age may be a factor in shooting incidents.
